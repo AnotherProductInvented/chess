@@ -103,9 +103,7 @@
 <!-- chess.js for chess logic (alpha/beta won't matter, just needed for rules). -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.2/chess.min.js"></script>
 <script>
- if (typeof Chess === "undefined") {
-     var Chess = window.Chess;
- }
+ var Chess = window.Chess || Chess;
 </script>
 ////////////////////////////////////////////////////////////////////////////////
 // JS version of your Python chess code
@@ -413,8 +411,8 @@ function handle_difficulty_choice(){
 
 function handle_playing(){
   hideAllScreens();
-  document.getElementById("chessCanvas").style.display = "block"; // Ensure canvas is visible
-  redrawPlayScreen();
+  document.getElementById("chessCanvas").style.display = "block"; // Ensure board is visible
+  requestAnimationFrame(mainLoop); // Start the game loop
 }
 
 function handle_game_over(){
@@ -542,6 +540,7 @@ function aiTurnIfNeeded(){
 ////////////////////////////////////////////////////////////////////////////////
 document.getElementById("newGameBtn").onclick=()=>{
   gameState="color_choice";
+  startAll(); // Start the game when clicking "New Game"
 };
 document.getElementById("instructionsBtn").onclick=()=>{
   gameState="instructions";
@@ -600,7 +599,6 @@ function startAll(){
     requestAnimationFrame(mainLoop);
   });
 }
-startAll();
 </script>
 </body>
 </html>
