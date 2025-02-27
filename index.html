@@ -592,6 +592,8 @@ document.addEventListener("keydown",(e)=>{
 // Start
 ////////////////////////////////////////////////////////////////////////////////
 function startAll(){
+  chess.reset(); // Ensure board is reset properly
+  document.getElementById("chessCanvas").style.display = "block"; // Make sure board is shown
   loadImages(()=>{
     requestAnimationFrame(mainLoop);
   });
