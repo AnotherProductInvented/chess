@@ -103,12 +103,8 @@
 <!-- chess.js for chess logic (alpha/beta won't matter, just needed for rules). -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.2/chess.min.js"></script>
 <script>
- var Chess = window.Chess || Chess;
+const Chess = window.Chess;
 </script>
-////////////////////////////////////////////////////////////////////////////////
-// JS version of your Python chess code
-////////////////////////////////////////////////////////////////////////////////
-
 // Canvas & context
 const canvas = document.getElementById("chessCanvas");
 const ctx = canvas.getContext("2d");
@@ -540,7 +536,8 @@ function aiTurnIfNeeded(){
 ////////////////////////////////////////////////////////////////////////////////
 document.getElementById("newGameBtn").onclick=()=>{
   gameState="color_choice";
-  startAll(); // Start the game when clicking "New Game"
+  hideAllScreens();
+  colorScreenDiv.style.display = "flex"; // Show the color selection screen
 };
 document.getElementById("instructionsBtn").onclick=()=>{
   gameState="instructions";
@@ -593,8 +590,9 @@ document.addEventListener("keydown",(e)=>{
 // Start
 ////////////////////////////////////////////////////////////////////////////////
 function startAll(){
-  chess.reset(); // Ensure board is reset properly
-  document.getElementById("chessCanvas").style.display = "block"; // Make sure board is shown
+  chess.reset(); 
+  hideAllScreens(); // Hide everything first
+  menuScreenDiv.style.display = "flex"; // Show the menu
   loadImages(()=>{
     requestAnimationFrame(mainLoop);
   });
