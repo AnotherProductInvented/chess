@@ -592,12 +592,10 @@ function startAll(){
   chess.reset(); 
   hideAllScreens(); // Hide everything first
   menuScreenDiv.style.display = "flex"; // Show the menu
-  loadImages(()=>{
+  loadImages(()=> {
     requestAnimationFrame(mainLoop);
   });
-  window.onload = startAll;
-</script>
-</body>
-</html>
+}
 
-
+// Ensure game starts when page loads
+window.onload = startAll;
