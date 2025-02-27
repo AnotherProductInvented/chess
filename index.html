@@ -105,7 +105,6 @@
 <script>
 const Chess = window.Chess;
 </script>
-// Canvas & context
 const canvas = document.getElementById("chessCanvas");
 const ctx = canvas.getContext("2d");
 
@@ -600,3 +599,7 @@ function startAll(){
 </script>
 </body>
 </html>
+  // Ensure game starts with the menu
+  window.onload = startAll;
+</script>
+
