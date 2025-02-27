@@ -103,7 +103,7 @@
 <!-- chess.js for chess logic (alpha/beta won't matter, just needed for rules). -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.2/chess.min.js"></script>
 <script>
-const Chess = window.Chess;
+var Chess = window.Chess || Chess;
 </script>
 const canvas = document.getElementById("chessCanvas");
 const ctx = canvas.getContext("2d");
@@ -599,7 +599,6 @@ function startAll(){
 </script>
 </body>
 </html>
-  // Ensure game starts with the menu
   window.onload = startAll;
 </script>
 
