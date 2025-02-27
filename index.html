@@ -1,22 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Another Product Invented Chess (Fixed)</title>
+  <style>
+    body {
+      margin: 0; padding: 0;
+      font-family: sans-serif;
+      display: flex; flex-direction: column; align-items: center;
+      background: #fff;
+    }
+    h1 { margin: 1rem 0 0.5rem 0; }
+    #gameContainer {
+      position: relative;
+      width: 720px;    /* match canvas internal width */
+      max-width: 100%; /* allow responsive scaling */
+    }
+    canvas {
+      display: block;
+      background: #fff;
+      width: 100%;
+      height: auto;
+    }
+    .overlayScreen {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      display: none;
+      background: rgba(255,255,255,0.95);
+      align-items: center; justify-content: flex-start;
+      flex-direction: column;
+      padding-top: 80px;
+      text-align: center;
+    }
+    button {
+      font-size: 18px; margin: 10px; padding: 10px 20px; cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Another Product Invented Chess</h1>
+
+<div id="gameContainer">
+  <!-- Canvas for the board -->
+  <canvas id="chessCanvas" width="720" height="800"></canvas>
+
+  <!-- SCREENS -->
+  <div id="menuScreen" class="overlayScreen">
+    <button id="newGameBtn">New Game</button>
+    <button id="instructionsBtn">Instructions</button>
+  </div>
+
+  <div id="instructionsScreen" class="overlayScreen">
+    <p><strong>Instructions ...</strong></p>
+    <p>Press [M] to return to the Main Menu.</p>
+  </div>
+
+  <div id="colorScreen" class="overlayScreen">
+    <p>Choose Your Side:</p>
+    <button id="whiteSideBtn">White [W]</button>
+    <button id="blackSideBtn">Black [B]</button>
+  </div>
+
+  <div id="difficultyScreen" class="overlayScreen">
+    <p>Select Difficulty:</p>
+    <button id="easyBtn">Easy [E]</button>
+    <button id="mediumBtn">Medium [M]</button>
+    <button id="hardBtn">Hard [H]</button>
+  </div>
+
+  <div id="gameOverScreen" class="overlayScreen">
+    <h2 id="gameOverText"></h2>
+    <p>Press [M] to return to the Main Menu.</p>
+  </div>
+</div>
+
+<!-- Chess.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+<script>
 ////////////////////////////////////////////////////////////////////////////////
 // Python-like variables
 ////////////////////////////////////////////////////////////////////////////////
 const WIDTH = 720, HEIGHT = 800;
 const SQUARE_SIZE = 90;
-const PIECE_SIZE = 88;  // Not truly used unless we want smaller pieces
-
+const PIECE_SIZE = 88; // not crucial if your images match
+// Colors
 const COLORS = {
   WHITE: "#FFFFFF",
   BROWN: "rgb(184,139,74)",
   TAN:   "rgb(227,193,111)",
   BLACK: "#000000",
   YELLOW: "rgba(255,255,0,0.47)",
-  FROM_SQ: "rgba(255,192,203,0.9)", // Pink
-  TO_SQ:   "rgba(255,165,0,0.9)"    // Orange
+  FROM_SQ: "rgba(255,192,203,0.9)",
+  TO_SQ:   "rgba(255,165,0,0.9)"
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-// Grab Canvas & Context
+// Canvas & Overlays
 ////////////////////////////////////////////////////////////////////////////////
 const canvas = document.getElementById("chessCanvas");
 const ctx = canvas.getContext("2d");
@@ -29,172 +109,403 @@ const difficultyScreen = document.getElementById("difficultyScreen");
 const gameOverScreen = document.getElementById("gameOverScreen");
 const gameOverText = document.getElementById("gameOverText");
 
-let gameState = "menu";
-
 ////////////////////////////////////////////////////////////////////////////////
-// Chess and State Variables
+// State Variables
 ////////////////////////////////////////////////////////////////////////////////
-const chess = new Chess();  // from chess.js
-
-// We'll store images in a "pieces" object
-const pieces = {};
-const pieceNames = ["king","queen","rook","bishop","knight","pawn"];
-const pieceColors = ["white","black"];
-
+let gameState = "menu";  // "menu", "instructions", "color_choice", "difficulty_choice", "playing", "game_over"
+let playerColor = null;  // 'w' or 'b'
+let difficulty = null;   // "easy", "medium", "hard"
 let selectedSquare = null;
 let legalMoves = [];
 let lastMove = null;
-let playerColor = null;
-let difficulty = null;
 
 ////////////////////////////////////////////////////////////////////////////////
-// Minimax-like AI (medium/hard)
+// Chess & AI
 ////////////////////////////////////////////////////////////////////////////////
+const chess = new Chess();
+
 const PIECE_VALUES = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
 
-function evaluateBoard(chessInstance) {
-  if (chessInstance.isGameOver()) {
-    if (chessInstance.inDraw() || chessInstance.inStalemate()) return 0;
-    return chessInstance.turn() === 'w' ? -9999 : 9999;
+function evaluateBoard(chessInst) {
+  // Check if game is over
+  if (chessInst.isGameOver()) {
+    if (chessInst.inDraw() || chessInst.inStalemate()) return 0;
+    return (chessInst.turn()==='w')? -9999 : 9999;
   }
-  return chessInstance.board().reduce((score, row) => {
-    return score + row.reduce((rowScore, piece) => {
-      if (!piece) return rowScore;
-      let value = PIECE_VALUES[piece.type];
-      return rowScore + (piece.color === 'w' ? value : -value);
-    }, 0);
-  }, 0);
+  // Material count
+  let boardArr = chessInst.board();
+  let score = 0;
+  for (let row=0; row<8; row++){
+    for (let col=0; col<8; col++){
+      let piece = boardArr[row][col];
+      if (piece){
+        let val = PIECE_VALUES[piece.type];
+        score += (piece.color==='w')? val : -val;
+      }
+    }
+  }
+  return score;
 }
 
 function minimax(chessInst, depth, alpha, beta, maximizing, endTime) {
-  if (depth === 0 || chessInst.isGameOver() || Date.now() > endTime) return evaluateBoard(chessInst);
-  let moves = chessInst.moves({ verbose: true });
-
+  if (depth===0 || chessInst.isGameOver() || Date.now()>endTime) {
+    return evaluateBoard(chessInst);
+  }
+  let moves = chessInst.moves({verbose:true});
   if (maximizing) {
-    let value = -Infinity;
-    for (let m of moves) {
-      chessInst.move(m);
-      value = Math.max(value, minimax(chessInst, depth - 1, alpha, beta, false, endTime));
+    let value=-Infinity;
+    for (let mv of moves){
+      chessInst.move(mv);
+      value = Math.max(value, minimax(chessInst, depth-1, alpha,beta,false,endTime));
       chessInst.undo();
-      alpha = Math.max(alpha, value);
-      if (beta <= alpha) break;
-      if (Date.now() > endTime) break;
+      alpha=Math.max(alpha,value);
+      if (beta<=alpha) break;
+      if (Date.now()>endTime) break;
     }
     return value;
   } else {
-    let value = Infinity;
-    for (let m of moves) {
-      chessInst.move(m);
-      value = Math.min(value, minimax(chessInst, depth - 1, alpha, beta, true, endTime));
+    let value=Infinity;
+    for (let mv of moves){
+      chessInst.move(mv);
+      value = Math.min(value, minimax(chessInst, depth-1, alpha,beta,true,endTime));
       chessInst.undo();
-      beta = Math.min(beta, value);
-      if (beta <= alpha) break;
-      if (Date.now() > endTime) break;
+      beta = Math.min(beta,value);
+      if (beta<=alpha) break;
+      if (Date.now()>endTime) break;
     }
     return value;
   }
 }
 
 function findBestMove(chessInst, depth, maxTime) {
-  let bestMove = null;
-  let bestValue = -Infinity;
-  const endTime = Date.now() + maxTime;
-  let moves = chessInst.moves({ verbose: true });
+  let bestMove=null;
+  let bestValue=-Infinity;
+  let endTime=Date.now()+maxTime;
+  let moves = chessInst.moves({verbose:true});
+  // shuffle
+  for (let i=moves.length-1; i>0; i--){
+    let rIdx=Math.floor(Math.random()*(i+1));
+    [moves[i],moves[rIdx]]=[moves[rIdx],moves[i]];
+  }
 
-  moves.sort(() => Math.random() - 0.5);
-
-  for (let m of moves) {
-    if (Date.now() > endTime) break;
-    chessInst.move(m);
-    let val = minimax(chessInst, depth - 1, -Infinity, Infinity, false, endTime);
+  for (let mv of moves){
+    if (Date.now()>endTime) break;
+    chessInst.move(mv);
+    let val = minimax(chessInst, depth-1, -Infinity,Infinity, false, endTime);
     chessInst.undo();
-    if (val > bestValue) {
-      bestValue = val;
-      bestMove = m;
+    if (val>bestValue) {
+      bestValue=val;
+      bestMove=mv;
     }
   }
-  return bestMove || moves[0] || null;
+  if (!bestMove && moves.length>0) return moves[Math.floor(Math.random()*moves.length)];
+  return bestMove || null;
 }
 
 function getAIMove(difficultyStr, chessInst) {
-  let moves = chessInst.moves({ verbose: true });
-  if (moves.length === 0) return null;
-  if (difficultyStr === "easy") return moves[Math.floor(Math.random() * moves.length)];
-  return findBestMove(chessInst, difficultyStr === "medium" ? 2 : 4, difficultyStr === "medium" ? 4000 : 8000);
+  let moves=chessInst.moves({verbose:true});
+  if (!moves.length) return null;
+  if (difficultyStr==="easy") {
+    return moves[Math.floor(Math.random()*moves.length)];
+  } else if (difficultyStr==="medium") {
+    // depth=2, time=4s
+    return findBestMove(chessInst, 2, 4000) || moves[0];
+  } else if (difficultyStr==="hard") {
+    // depth=4, time=8s
+    return findBestMove(chessInst,4,8000) || moves[0];
+  } else {
+    // fallback random
+    return moves[Math.floor(Math.random()*moves.length)];
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Board => Screen transformations
+// Pieces
 ////////////////////////////////////////////////////////////////////////////////
-function boardToScreen(row, col) {
-  return playerColor === 'w' ? { sr: 7 - row, sc: 7 - col } : { sr: row, sc: col };
+const pieceImages = {};
+const pieceNames = ["king","queen","rook","bishop","knight","pawn"];
+const pieceColors = ["white","black"];
+
+function loadAllPieces(callback) {
+  let total = pieceNames.length * pieceColors.length;
+  let loaded=0;
+  pieceColors.forEach(col=>{
+    pieceNames.forEach(name=>{
+      const key = `${col}_${name}`;
+      let img = new Image();
+      img.src=`pieces/${col}_${name}.png`;
+      img.onload=()=>{
+        pieceImages[key]=img;
+        loaded++;
+        if(loaded===total) callback();
+      };
+    });
+  });
 }
 
-function screenToBoard(sr, sc) {
-  return playerColor === 'w' ? { r: 7 - sr, c: 7 - sc } : { r: sr, c: sc };
+////////////////////////////////////////////////////////////////////////////////
+// Board <-> Screen 
+////////////////////////////////////////////////////////////////////////////////
+function boardToScreen(row,col) {
+  if (playerColor==='w') return {sr:7-row, sc:7-col};
+  return {sr:row, sc:col};
+}
+function screenToBoard(sr,sc) {
+  if (playerColor==='w') return {r:7-sr, c:7-sc};
+  return {r:sr, c:sc};
+}
+// convert "e2" -> row,col
+function algToRC(alg) {
+  let file=alg.charCodeAt(0)-97; // 'a'
+  let rank=parseInt(alg[1]); //1..8
+  let row=8-rank; // 0..7
+  let col=file;
+  return {row,col};
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Click Handling & AI Turn
+// Drawing
 ////////////////////////////////////////////////////////////////////////////////
-canvas.addEventListener("mousedown", (e) => {
-  if (gameState !== "playing") return;
-  
-  const rect = canvas.getBoundingClientRect();
-  let { r, c } = screenToBoard(Math.floor((e.clientY - rect.top) / SQUARE_SIZE), Math.floor((e.clientX - rect.left) / SQUARE_SIZE));
-  let square = String.fromCharCode(97 + c) + (8 - r);
+function drawBoardOnly() {
+  for (let row=0; row<8; row++){
+    for (let col=0; col<8; col++){
+      let {sr,sc} = boardToScreen(row,col);
+      let color = ((row+col)%2===0)? COLORS.TAN : COLORS.BROWN;
+      ctx.fillStyle=color;
+      ctx.fillRect(sc*SQUARE_SIZE, sr*SQUARE_SIZE, SQUARE_SIZE,SQUARE_SIZE);
+    }
+  }
+}
+function drawLastMove() {
+  if (!lastMove) return;
+  let { from, to } = lastMove; // e.g. 'e2','e4'
+  let fromRC = algToRC(from);
+  let toRC   = algToRC(to);
+
+  let {sr:fsr, sc:fsc}= boardToScreen(fromRC.row, fromRC.col);
+  ctx.fillStyle=COLORS.FROM_SQ;
+  ctx.fillRect(fsc*SQUARE_SIZE, fsr*SQUARE_SIZE, SQUARE_SIZE,SQUARE_SIZE);
+
+  let {sr:tsr, sc:tsc}= boardToScreen(toRC.row, toRC.col);
+  ctx.fillStyle=COLORS.TO_SQ;
+  ctx.fillRect(tsc*SQUARE_SIZE, tsr*SQUARE_SIZE, SQUARE_SIZE,SQUARE_SIZE);
+}
+function drawHighlights() {
+  if (!selectedSquare) return;
+  ctx.fillStyle=COLORS.YELLOW;
+  for (let mv of legalMoves){
+    let {row,col}=algToRC(mv.to);
+    let {sr,sc}= boardToScreen(row,col);
+    ctx.fillRect(sc*SQUARE_SIZE, sr*SQUARE_SIZE, SQUARE_SIZE,SQUARE_SIZE);
+  }
+}
+function drawPiecesOnTop() {
+  let symbolMap={p:"pawn", n:"knight", b:"bishop", r:"rook", q:"queen", k:"king"};
+  let boardArr= chess.board();
+  for (let row=0; row<8; row++){
+    for (let col=0; col<8; col++){
+      let piece=boardArr[row][col];
+      if (!piece) continue;
+      let colorStr=(piece.color==='w')?"white":"black";
+      let pieceStr=symbolMap[piece.type];
+      let key=`${colorStr}_${pieceStr}`;
+      let {sr,sc}=boardToScreen(row,col);
+      ctx.drawImage(pieceImages[key], sc*SQUARE_SIZE, sr*SQUARE_SIZE, PIECE_SIZE, PIECE_SIZE);
+    }
+  }
+}
+function drawBottomBar(text="") {
+  let barHeight=60;
+  ctx.fillStyle=COLORS.WHITE;
+  ctx.fillRect(0, HEIGHT-barHeight, WIDTH,barHeight);
+  ctx.fillStyle=COLORS.BLACK;
+  ctx.font="24px sans-serif";
+  ctx.fillText(text, 10, HEIGHT-20);
+}
+
+function redrawPlayingScreen() {
+  ctx.clearRect(0,0,WIDTH,HEIGHT);
+  drawBoardOnly();
+  drawLastMove();
+  drawHighlights();
+  drawPiecesOnTop();
+  drawBottomBar("Click piece, then square. Press [M] to return to menu.");
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// States
+////////////////////////////////////////////////////////////////////////////////
+function hideAllScreens() {
+  menuScreen.style.display="none";
+  instructionsScreen.style.display="none";
+  colorScreen.style.display="none";
+  difficultyScreen.style.display="none";
+  gameOverScreen.style.display="none";
+}
+
+function showScreen(id) {
+  hideAllScreens();
+  document.getElementById(id).style.display="flex";
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// The main loop
+////////////////////////////////////////////////////////////////////////////////
+function mainLoop() {
+  switch(gameState) {
+    case "menu": showScreen("menuScreen"); break;
+    case "instructions": showScreen("instructionsScreen"); break;
+    case "color_choice": showScreen("colorScreen"); break;
+    case "difficulty_choice": showScreen("difficultyScreen"); break;
+    case "playing":
+      // hide overlays
+      hideAllScreens();
+      redrawPlayingScreen();
+      break;
+    case "game_over":
+      showScreen("gameOverScreen");
+      break;
+  }
+  requestAnimationFrame(mainLoop);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// MOUSE
+////////////////////////////////////////////////////////////////////////////////
+canvas.addEventListener("mousedown",(e)=>{
+  if (gameState!=="playing") return;
+  const rect=canvas.getBoundingClientRect();
+  let x=e.clientX-rect.left, y=e.clientY-rect.top;
+  if (y>=8*SQUARE_SIZE) return;
+
+  let scrCol=Math.floor(x/SQUARE_SIZE);
+  let scrRow=Math.floor(y/SQUARE_SIZE);
+  let {r,c}= screenToBoard(scrRow,scrCol);
+  let square = String.fromCharCode(97+c)+(8-r); // 'a'+c, 8-r
 
   if (!selectedSquare) {
-    let piece = chess.get(square);
-    if (piece && piece.color === chess.turn()) {
-      selectedSquare = square;
-      legalMoves = chess.moves({ verbose: true }).filter(m => m.from === square);
+    let piece=chess.get(square);
+    if (piece && piece.color===chess.turn()) {
+      selectedSquare=square;
+      // find legal moves from that square
+      let all=chess.moves({verbose:true});
+      legalMoves=all.filter(m=>m.from===square);
     }
   } else {
-    let move = legalMoves.find(m => m.to === square);
-    if (move) {
-      chess.move(move);
-      lastMove = move;
-      selectedSquare = null;
-      legalMoves = [];
-      if (chess.isGameOver()) return showGameOver();
-      setTimeout(aiTurnIfNeeded, 500);
+    let candidate=legalMoves.find(m=>m.to===square);
+    if (candidate) {
+      chess.move(candidate);
+      lastMove=candidate;
+      selectedSquare=null; 
+      legalMoves=[];
+      if (chess.isGameOver()) {
+        gameState="game_over";
+        // figure out winner
+        if (chess.inCheckmate()) {
+          if (chess.turn()==='w') gameOverText.textContent="Black Wins!";
+          else gameOverText.textContent="White Wins!";
+        } else {
+          gameOverText.textContent="Draw!";
+        }
+      } else {
+        // AI turn if needed
+        setTimeout(aiTurnIfNeeded, 300);
+      }
     } else {
-      selectedSquare = null;
-      legalMoves = [];
+      selectedSquare=null;
+      legalMoves=[];
     }
   }
 });
 
 function aiTurnIfNeeded() {
-  if (chess.turn() !== playerColor) {
-    const ai_move = getAIMove(difficulty, chess);
-    if (ai_move) chess.move(ai_move);
-    if (chess.isGameOver()) showGameOver();
+  if ((playerColor==='w' && chess.turn()==='b') || (playerColor==='b' && chess.turn()==='w')) {
+    // do AI
+    if (difficulty==="medium"||difficulty==="hard") {
+      // show thinking
+      ctx.fillStyle="rgba(255,255,255,0.9)";
+      ctx.fillRect(WIDTH/2-100, HEIGHT/2-30, 200,60);
+      ctx.fillStyle="#000";
+      ctx.font="24px sans-serif";
+      ctx.fillText("Thinking...", WIDTH/2-50, HEIGHT/2);
+    }
+    let mv=getAIMove(difficulty,chess);
+    if (mv) {
+      chess.move(mv);
+      lastMove=mv;
+    }
+    if (chess.isGameOver()) {
+      gameState="game_over";
+      if (chess.inCheckmate()) {
+        if (chess.turn()==='w') gameOverText.textContent="Black Wins!";
+        else gameOverText.textContent="White Wins!";
+      } else {
+        gameOverText.textContent="Draw!";
+      }
+    }
   }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Game Over
+// Buttons
 ////////////////////////////////////////////////////////////////////////////////
-function showGameOver() {
-  gameState = "game_over";
-  gameOverText.textContent = chess.inCheckmate() ? (chess.turn() === 'w' ? "Black Wins!" : "White Wins!") : "Draw!";
-  gameOverScreen.style.display = "flex";
+document.getElementById("newGameBtn").onclick=()=>{ gameState="color_choice"; };
+document.getElementById("instructionsBtn").onclick=()=>{ gameState="instructions"; };
+
+document.getElementById("whiteSideBtn").onclick=()=>{
+  playerColor='w';
+  chess.reset();
+  selectedSquare=null; legalMoves=[]; lastMove=null;
+  gameState="difficulty_choice";
+};
+document.getElementById("blackSideBtn").onclick=()=>{
+  playerColor='b';
+  chess.reset();
+  selectedSquare=null; legalMoves=[]; lastMove=null;
+  gameState="difficulty_choice";
+};
+
+document.getElementById("easyBtn").onclick=()=>{
+  difficulty="easy";
+  chess.reset();
+  selectedSquare=null; legalMoves=[]; lastMove=null;
+  gameState="playing";
+};
+document.getElementById("mediumBtn").onclick=()=>{
+  difficulty="medium";
+  chess.reset();
+  selectedSquare=null; legalMoves=[]; lastMove=null;
+  gameState="playing";
+};
+document.getElementById("hardBtn").onclick=()=>{
+  difficulty="hard";
+  chess.reset();
+  selectedSquare=null; legalMoves=[]; lastMove=null;
+  gameState="playing";
+};
+
+// Press [M] => menu
+document.addEventListener("keydown",(e)=>{
+  if (e.key.toLowerCase()==="m") {
+    if (["playing","instructions","game_over"].includes(gameState)) {
+      chess.reset();
+      selectedSquare=null; legalMoves=[]; lastMove=null;
+      gameState="menu";
+    }
+  }
+});
+
+////////////////////////////////////////////////////////////////////////////////
+// Start
+////////////////////////////////////////////////////////////////////////////////
+function startEverything() {
+  // load images if needed
+  loadAllPieces(()=>{
+    requestAnimationFrame(mainLoop);
+  });
 }
+startEverything();
+</script>
 
-////////////////////////////////////////////////////////////////////////////////
-// Start Game
-////////////////////////////////////////////////////////////////////////////////
-document.getElementById("newGameBtn").onclick = () => gameState = "color_choice";
-document.getElementById("whiteSideBtn").onclick = () => { playerColor = 'w'; gameState = "difficulty_choice"; };
-document.getElementById("blackSideBtn").onclick = () => { playerColor = 'b'; gameState = "difficulty_choice"; };
-document.getElementById("easyBtn").onclick = () => { difficulty = "easy"; gameState = "playing"; chess.reset(); };
-document.getElementById("mediumBtn").onclick = () => { difficulty = "medium"; gameState = "playing"; chess.reset(); };
-document.getElementById("hardBtn").onclick = () => { difficulty = "hard"; gameState = "playing"; chess.reset(); };
-document.addEventListener("keydown", (e) => { if (e.key.toLowerCase() === "m") gameState = "menu"; });
-
-////////////////////////////////////////////////////////////////////////////////
-// Start Loop
-////////////////////////////////////////////////////////////////////////////////
-requestAnimationFrame(() => { if (gameState === "playing") redrawPlayingScreen(); });
+</body>
+</html>
