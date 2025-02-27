@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Another Product Invented Chess (JavaScript)</title>
+  <title>Another Product Invented Chess</title>
   <style>
     /* Basic styling similar to your Python game window */
     body {
@@ -103,6 +103,8 @@
 <!-- chess.js for chess logic (alpha/beta won't matter, just needed for rules). -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.2/chess.min.js"></script>
 <script>
+ const Chess = window.Chess; // Fixes "Chess is not defined" error
+</script>
 ////////////////////////////////////////////////////////////////////////////////
 // JS version of your Python chess code
 ////////////////////////////////////////////////////////////////////////////////
