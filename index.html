@@ -588,11 +588,15 @@ document.addEventListener("keydown",(e)=>{
 ////////////////////////////////////////////////////////////////////////////////
 // Start
 ////////////////////////////////////////////////////////////////////////////////
-function startAll(){
+function startAll() {
+  console.log("startAll function is running!");
   chess.reset(); 
   hideAllScreens(); // Hide everything first
   menuScreenDiv.style.display = "flex"; // Show the menu
-  loadImages(()=> {
+  console.log("Menu should now be visible.");
+  
+  loadImages(() => {
+    console.log("Images loaded, starting game loop.");
     requestAnimationFrame(mainLoop);
   });
 }
