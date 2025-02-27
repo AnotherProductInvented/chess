@@ -103,7 +103,9 @@
 <!-- chess.js for chess logic (alpha/beta won't matter, just needed for rules). -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.2/chess.min.js"></script>
 <script>
- const Chess = window.Chess; // Fixes "Chess is not defined" error
+ if (typeof Chess === "undefined") {
+     var Chess = window.Chess;
+ }
 </script>
 ////////////////////////////////////////////////////////////////////////////////
 // JS version of your Python chess code
@@ -410,8 +412,8 @@ function handle_difficulty_choice(){
 }
 
 function handle_playing(){
-  // Hide overlays
   hideAllScreens();
+  document.getElementById("chessCanvas").style.display = "block"; // Ensure canvas is visible
   redrawPlayScreen();
 }
 
