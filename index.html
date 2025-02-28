@@ -5,11 +5,12 @@
   <title>Another Product Invented Chess</title>
   <style>
     body {
-      margin: 0; padding: 0; 
-      background: #fff; 
+      margin: 0;
+      padding: 0;
+      background: #fff;
       font-family: sans-serif;
-      display: flex; 
-      flex-direction: column; 
+      display: flex;
+      flex-direction: column;
       align-items: center;
     }
     h1 {
@@ -17,49 +18,74 @@
     }
     #gameContainer {
       position: relative;
-      width: 720px;   /* same as canvas internal width */
+      width: 720px; /* same as canvas internal width */
       max-width: 100%;
     }
-
-   
-
+    /* Canvas background is transparent so the board shows through */
     canvas {
       display: block;
-      background: #fff;
+      background: transparent;
       width: 100%;
       height: auto;
     }
     .overlayScreen {
       position: absolute;
       top: 0; left: 0; right: 0; bottom: 0;
-      display: none;  /* shown/hidden dynamically */
+      display: none; /* shown/hidden dynamically */
       background: rgba(255,255,255,0.95);
-      align-items: center; 
+      align-items: center;
       justify-content: flex-start;
       flex-direction: column;
       padding-top: 80px;
       text-align: center;
+      z-index: 5;
     }
     button {
-      font-size: 18px; margin: 10px; padding: 10px 20px; cursor: pointer;
+      font-size: 18px;
+      margin: 10px;
+      padding: 10px 20px;
+      cursor: pointer;
+    }
+    /* Loading overlay with spinner */
+    #loadingOverlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      color: #fff;
+      font-size: 24px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      z-index: 1000;
+    }
+    .spinner {
+      border: 8px solid rgba(255,255,255,0.3);
+      border-top: 8px solid #fff;
+      border-radius: 50%;
+      width: 60px;
+      height: 60px;
+      animation: spin 1s linear infinite;
+      margin-bottom: 10px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
     }
   </style>
 </head>
 <body>
 
 <h1>Another Product Invented Chess</h1>
-
 <div id="gameContainer">
-<!-- MENU SCREEN -->
-<div id="menuScreen" class="overlayScreen">
-  <h2>Another Product Invented Chess</h2>
-  <button id="newGameBtn">New Game</button>
-  <button id="instructionsBtn">Instructions</button>
-</div>
-
+  <!-- MENU SCREEN -->
+  <div id="menuScreen" class="overlayScreen">
+    <h2>Another Product Invented Chess</h2>
+    <button id="newGameBtn">New Game</button>
+    <button id="instructionsBtn">Instructions</button>
+  </div>
 
   <canvas id="chessCanvas" width="720" height="800"></canvas>
-
 
   <!-- INSTRUCTIONS -->
   <div id="instructionsScreen" class="overlayScreen">
@@ -83,6 +109,7 @@
     <p>Choose Your Side:</p>
     <button id="whiteSideBtn">White [W]</button>
     <button id="blackSideBtn">Black [B]</button>
+    <p>You can also press W or B on your keyboard.</p>
   </div>
 
   <!-- DIFFICULTY -->
@@ -91,538 +118,495 @@
     <button id="easyBtn">Easy [E]</button>
     <button id="mediumBtn">Medium [M]</button>
     <button id="hardBtn">Hard [H]</button>
+    <p>You can also press E, M, or H on your keyboard.</p>
   </div>
 
   <!-- GAME OVER -->
   <div id="gameOverScreen" class="overlayScreen">
     <h2 id="gameOverText"></h2>
+    <button id="gameOverNewGameBtn">New Game</button>
     <p>Press [M] to return to the Main Menu.</p>
   </div>
 </div>
 
-<!-- chess.js for logic -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/1.0.0/chess.js"></script>
+<!-- Loading/Thinking overlay with spinner -->
+<div id="loadingOverlay">
+  <div class="spinner"></div>
+  <p>Thinking...</p>
+</div>
+
+<!-- Load chess.js BEFORE our game code -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
 <script>
-////////////////////////////////////////////////////////////////////////////////
-// Global & Constants
-////////////////////////////////////////////////////////////////////////////////
-const canvas = document.getElementById("chessCanvas");
-const menuScreen = document.getElementById("menuScreen");
-const ctx = canvas.getContext("2d");
-
-// Overlays
-
-const instructionsScreen = document.getElementById("instructionsScreen");
-const colorScreen = document.getElementById("colorScreen");
-const difficultyScreen = document.getElementById("difficultyScreen");
-const gameOverScreen = document.getElementById("gameOverScreen");
-const gameOverText = document.getElementById("gameOverText");
-
-const WIDTH=720, HEIGHT=800;
-const SQUARE_SIZE=90;
-const PIECE_SIZE=88; 
-
-// Colors
-const TAN = "rgb(227,193,111)";
-const BROWN= "rgb(184,139,74)";
-const YELLOW= "rgba(255,255,0,0.47)";
-const PINK  = "rgba(255,192,203,1)";
-const ORANGE= "rgba(255,165,0,1)";
-const WHITE= "#fff";
-const BLACK= "#000";
-
-let gameState = "menu";
-console.log("GameState is now:", gameState);
-function handle_menu(){
-  console.log("GameState is now:", gameState);
-  hideAllScreens();
-  menuScreen.style.display="flex";
-}
-
-let running = true;
-
-// chess.js instance
-const chess = new Chess(); // Ensure chess.js is properly loaded
-console.log("Chess.js initialized:", chess);
-
-// Selections
-let selectedSquare = null;
-let legalMoves = [];
-let lastMove = null;
-let playerColor = null; // 'w','b'
-let difficulty = null;  // 'easy','medium','hard'
-
-////////////////////////////////////////////////////////////////////////////////
-// Minimimax
-////////////////////////////////////////////////////////////////////////////////
-const PIECE_VALUES = {p:1,n:3,b:3,r:5,q:9,k:0};
-
-function evaluateBoard(chInst){
-  if (chInst.isGameOver()){
-    if (chInst.inDraw()||chInst.inStalemate()) return 0;
-    return (chInst.turn()==='w')? -9999 : 9999;
-  }
-  let score=0;
-  let brd= chInst.board();
-  for (let row=0; row<8; row++){
-    for (let col=0; col<8; col++){
-      let p= brd[row][col];
-      if (p){
-        let val= PIECE_VALUES[p.type];
-        if (p.color==='w') score+=val; else score-=val;
+  // Function to remove white background from an image.
+  function removeWhiteBackground(image, callback) {
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = image.width;
+    tempCanvas.height = image.height;
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.drawImage(image, 0, 0);
+    const imgData = tempCtx.getImageData(0, 0, image.width, image.height);
+    const data = imgData.data;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i] > 250 && data[i + 1] > 250 && data[i + 2] > 250) {
+        data[i + 3] = 0;
       }
     }
+    tempCtx.putImageData(imgData, 0, 0);
+    const newImage = new Image();
+    newImage.src = tempCanvas.toDataURL();
+    newImage.onload = () => callback(newImage);
   }
-  return score;
-}
-function minimax(chInst, depth, alpha,beta, maximizing, endTime){
-  if (depth===0 || chInst.isGameOver() || Date.now()>endTime){
-    return evaluateBoard(chInst);
+
+  // Global Variables & Constants
+  const canvas = document.getElementById("chessCanvas");
+  const ctx = canvas.getContext("2d");
+
+  const menuScreen = document.getElementById("menuScreen");
+  const instructionsScreen = document.getElementById("instructionsScreen");
+  const colorScreen = document.getElementById("colorScreen");
+  const difficultyScreen = document.getElementById("difficultyScreen");
+  const gameOverScreen = document.getElementById("gameOverScreen");
+  const gameOverText = document.getElementById("gameOverText");
+  const loadingOverlay = document.getElementById("loadingOverlay");
+
+  const pieces = {};  // Object to store processed chess piece images
+
+  const WIDTH = 720, HEIGHT = 800;
+  const SQUARE_SIZE = 90;
+  const PIECE_SIZE = 88; 
+
+  const TAN = "rgb(227,193,111)";
+  const BROWN = "rgb(184,139,74)";
+  const PINK = "rgba(255,192,203,1)";
+  const ORANGE = "rgba(255,165,0,1)";
+  const WHITE = "#fff";
+  const BLACK = "#000";
+
+  let gameState = "menu";
+  let selectedSquare = null;
+  let legalMoves = [];
+  let lastMove = null;
+  let playerColor = null; // 'w' or 'b'
+  let difficulty = null;  // 'easy', 'medium', or 'hard'
+  let aiThinking = false;
+
+  const chess = new Chess();
+  const pieceMap = { p:"pawn", n:"knight", b:"bishop", r:"rook", q:"queen", k:"king" };
+
+  // Board Orientation Helpers
+  function boardToScreen(row, col) {
+    if (playerColor === 'w') {
+      return { sr: row, sc: col };
+    } else {
+      return { sr: 7 - row, sc: 7 - col };
+    }
   }
-  let moves= chInst.moves({verbose:true});
-  if (maximizing){
-    let value=-999999;
-    for (let mv of moves){
-      chInst.move(mv);
-      value= Math.max(value, minimax(chInst, depth-1, alpha,beta,false,endTime));
+  function screenToBoard(sr, sc) {
+    if (playerColor === 'w') {
+      return { r: sr, c: sc };
+    } else {
+      return { r: 7 - sr, c: 7 - sc };
+    }
+  }
+  function algToRC(square) {
+    let file = square.charCodeAt(0) - 'a'.charCodeAt(0);
+    let rank = parseInt(square[1]);
+    return { row: 8 - rank, col: file };
+  }
+
+  // AI: Minimax & Move Selection
+  const PIECE_VALUES = { p:1, n:3, b:3, r:5, q:9, k:0 };
+  function evaluateBoard(chInst) {
+    // End game only if checkmate occurs.
+    if (chInst.in_checkmate()){
+      return (chInst.turn() === 'w') ? -9999 : 9999;
+    }
+    let score = 0;
+    let board = chInst.board();
+    for (let row = 0; row < 8; row++){
+      for (let col = 0; col < 8; col++){
+        let piece = board[row][col];
+        if (piece){
+          let val = PIECE_VALUES[piece.type];
+          score += (piece.color === 'w') ? val : -val;
+        }
+      }
+    }
+    return score;
+  }
+  function minimax(chInst, depth, alpha, beta, maximizing, endTime) {
+    if (depth === 0 || chInst.game_over() || Date.now() > endTime) {
+      return evaluateBoard(chInst);
+    }
+    let moves = chInst.moves({ verbose: true });
+    if (maximizing) {
+      let value = -999999;
+      for (let move of moves) {
+        chInst.move(move);
+        value = Math.max(value, minimax(chInst, depth - 1, alpha, beta, false, endTime));
+        chInst.undo();
+        alpha = Math.max(alpha, value);
+        if (beta <= alpha) break;
+        if (Date.now() > endTime) break;
+      }
+      return value;
+    } else {
+      let value = 999999;
+      for (let move of moves) {
+        chInst.move(move);
+        value = Math.min(value, minimax(chInst, depth - 1, alpha, beta, true, endTime));
+        chInst.undo();
+        beta = Math.min(beta, value);
+        if (beta <= alpha) break;
+        if (Date.now() > endTime) break;
+      }
+      return value;
+    }
+  }
+  function findBestMove(chInst, depth, maxTime) {
+    let bestMove = null;
+    let bestValue = -999999;
+    let endTime = Date.now() + maxTime;
+    let moves = chInst.moves({ verbose: true });
+    for (let i = moves.length - 1; i > 0; i--) {
+      let ridx = Math.floor(Math.random() * (i + 1));
+      [moves[i], moves[ridx]] = [moves[ridx], moves[i]];
+    }
+    for (let move of moves) {
+      if (Date.now() > endTime) break;
+      chInst.move(move);
+      let val = minimax(chInst, depth - 1, -100000, 100000, false, endTime);
       chInst.undo();
-      alpha= Math.max(alpha,value);
-      if (beta<=alpha) break;
-      if (Date.now()>endTime) break;
-    }
-    return value;
-  } else {
-    let value=999999;
-    for (let mv of moves){
-      chInst.move(mv);
-      value= Math.min(value, minimax(chInst, depth-1, alpha,beta,true,endTime));
-      chInst.undo();
-      beta= Math.min(beta,value);
-      if (beta<=alpha) break;
-      if (Date.now()>endTime) break;
-    }
-    return value;
-  }
-}
-
-function findBestMove(chInst, depth, maxTime) {
-  let bestMove = null;
-  let bestValue = -999999;
-  let endTime = Date.now() + maxTime;
-  let moves = chInst.moves({ verbose: true });
-
-  // Shuffle moves for randomness
-  for (let i = moves.length - 1; i > 0; i--) {
-    let ridx = Math.floor(Math.random() * (i + 1));
-    [moves[i], moves[ridx]] = [moves[ridx], moves[i]];
-  }
-
-  for (let mv of moves) {
-    if (Date.now() > endTime) break; // Stop if time runs out
-    chInst.move(mv);
-    let val = minimax(chInst, depth - 1, -100000, 100000, false, endTime);
-    chInst.undo();
-
-    if (val > bestValue) {
-      bestValue = val;
-      bestMove = mv;
-    }
-  }
-
-  // Ensure a valid move is returned
-  if (!bestMove && moves.length > 0) {
-    return moves[Math.floor(Math.random() * moves.length)];
-  }
-  return bestMove;
-}
-
-
-function getAiMove(diffStr, chInst){
-  let moves= chInst.moves({verbose:true});
-  if (!moves.length) return null;
-  if (diffStr==="easy"){
-    return moves[Math.floor(Math.random()*moves.length)];
-  } else if (diffStr==="medium"){
-    return findBestMove(chInst,2,4000) || moves[0];
-  } else if (diffStr==="hard"){
-    return findBestMove(chInst,4,8000) || moves[0];
-  } else {
-    return moves[Math.floor(Math.random()*moves.length)];
-  }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Drawing
-////////////////////////////////////////////////////////////////////////////////
-function boardToScreen(row,col){
-  if (playerColor==='w') return {sr:7-row, sc:7-col};
-  return {sr:row, sc:col};
-}
-function screenToBoard(sr,sc){
-  if (playerColor==='w') return {r:7-sr, c:7-sc};
-  return {r:sr, c:sc};
-}
-function algToRC(a){
-  let file= a.charCodeAt(0)-'a'.charCodeAt(0); //0..7
-  let rank= parseInt(a[1]); //1..8
-  let row=8-rank; 
-  let col=file;
-  return {row,col};
-}
-
-function drawBoardOnly(){
-  for (let row=0; row<8; row++){
-    for (let col=0; col<8; col++){
-      let {sr,sc}= boardToScreen(row,col);
-      let color=((row+col)%2===0)? TAN: BROWN;
-      ctx.fillStyle=color;
-      ctx.fillRect(sc*SQUARE_SIZE, sr*SQUARE_SIZE, SQUARE_SIZE,SQUARE_SIZE);
-    }
-  }
-}
-function drawLastMove(){
-  if (!lastMove) return;
-  let {from,to}= lastMove;
-  let frc= algToRC(from);
-  let toc= algToRC(to);
-  let {sr:fsr,sc:fsc}= boardToScreen(frc.row,frc.col);
-  let {sr:tsr,sc:tsc}= boardToScreen(toc.row,toc.col);
-  // fill pink, orange
-  ctx.fillStyle=PINK;
-  ctx.fillRect(fsc*SQUARE_SIZE, fsr*SQUARE_SIZE, SQUARE_SIZE,SQUARE_SIZE);
-  ctx.fillStyle=ORANGE;
-  ctx.fillRect(tsc*SQUARE_SIZE, tsr*SQUARE_SIZE, SQUARE_SIZE,SQUARE_SIZE);
-}
-function drawHighlights(){
-  if (!selectedSquare) return;
-  ctx.fillStyle = "rgba(255, 255, 0, 0.5)";
-  for (let mv of legalMoves){
-    let toRC = algToRC(mv.to);
-    let { sr, sc } = boardToScreen(toRC.row, toRC.col);
-    ctx.beginPath();
-    ctx.arc(sc * SQUARE_SIZE + SQUARE_SIZE / 2, sr * SQUARE_SIZE + SQUARE_SIZE / 2, SQUARE_SIZE / 4, 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
-
-const pieceMap= { p:"pawn", n:"knight", b:"bishop", r:"rook", q:"queen", k:"king" };
-const loadedPieces={}; // loaded images => e.g. "white_pawn" => Image
-function drawPiecesOnTop() {
-  let brd = chess.board();
-  for (let row = 0; row < 8; row++){
-    for (let col = 0; col < 8; col++){
-      let piece = brd[row][col];
-      if (!piece) continue;
-
-      let colorStr = (piece.color === 'w') ? "white" : "black";
-      let pName = pieceMap[piece.type];
-      let key = `${colorStr}_${pName}`;
-
-      if (pieces[key]) {
-        let { sr, sc } = boardToScreen(row, col);
-        ctx.drawImage(pieces[key], sc * SQUARE_SIZE, sr * SQUARE_SIZE, PIECE_SIZE, PIECE_SIZE);
-      } else {
-        console.warn(`Missing image: ${key}`);
+      if (val > bestValue) {
+        bestValue = val;
+        bestMove = move;
       }
     }
+    if (!bestMove && moves.length > 0) {
+      return moves[Math.floor(Math.random() * moves.length)];
+    }
+    return bestMove;
+  }
+  function getAiMove(diff, chInst) {
+    let moves = chInst.moves({ verbose: true });
+    if (!moves.length) return null;
+    if (diff === "easy") {
+      return moves[Math.floor(Math.random() * moves.length)];
+    } else if (diff === "medium") {
+      return findBestMove(chInst, 2, 4000) || moves[0];
+    } else if (diff === "hard") {
+      return findBestMove(chInst, 4, 8000) || moves[0];
+    } else {
+      return moves[Math.floor(Math.random() * moves.length)];
+    }
+  }
 
-  for (let row=0; row<8; row++){
-    for (let col=0; col<8; col++){
-      let piece = brd[row][col];
-      if (!piece) continue;  // ✅ Fix: Skip if no piece is there
-
-      let colorStr = (piece.color === 'w') ? "white" : "black";
-      let pName = pieceMap[piece.type];
-      let key = `${colorStr}_${pName}`;
-
-      // Ensure image exists before drawing
-      if (pieces[key]) {
+  // Drawing Functions
+  function drawBoardOnly() {
+    for (let row = 0; row < 8; row++){
+      for (let col = 0; col < 8; col++){
         let { sr, sc } = boardToScreen(row, col);
-        ctx.drawImage(pieces[key], sc * SQUARE_SIZE, sr * SQUARE_SIZE, PIECE_SIZE, PIECE_SIZE);
+        let color = ((row + col) % 2 === 0) ? TAN : BROWN;
+        ctx.fillStyle = color;
+        ctx.fillRect(sc * SQUARE_SIZE, sr * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
       }
     }
   }
-}
-
-  for (let row=0; row<8; row++){
-    for (let col=0; col<8; col++){
-      let piece= brd[row][col];
-      if (!piece) continue;
-      let colorStr=(piece.color==='w')? "white":"black";
-      let pName= pieceMap[piece.type];
-      let key= `${colorStr}_${pName}`;
-      let {sr,sc}= boardToScreen(row,col);
-      ctx.drawImage(pieces[key], sc*SQUARE_SIZE, sr*SQUARE_SIZE, PIECE_SIZE,PIECE_SIZE);
-    }
-}
-function drawBottomBar(txt=""){
-  let barHeight=60;
-  ctx.fillStyle=WHITE;
-  ctx.fillRect(0,HEIGHT-barHeight, WIDTH, barHeight);
-  ctx.fillStyle=BLACK;
-  ctx.font="24px sans-serif";
-  ctx.fillText(txt, 10, HEIGHT-20);
-}
-
-function redrawPlayScreen(){
-  ctx.clearRect(0,0,WIDTH,HEIGHT);
-  drawBoardOnly();
-  drawLastMove();
-  drawHighlights();
-  drawPiecesOnTop();
-  drawBottomBar("Click piece, then square. Press [M] for menu.");
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Overlays
-////////////////////////////////////////////////////////////////////////////////
-function hideAllScreens(){
-  menuScreen.style.display="none";
-  instructionsScreen.style.display="none";
-  colorScreen.style.display="none";
-  difficultyScreen.style.display="none";
-  gameOverScreen.style.display="none";
-}
-function handle_menu(){ hideAllScreens(); menuScreen.style.display="flex"; }
-function handle_instructions(){ hideAllScreens(); instructionsScreen.style.display="flex"; }
-function handle_color_choice(){ hideAllScreens(); colorScreen.style.display="flex"; }
-function handle_difficulty_choice(){ hideAllScreens(); difficultyScreen.style.display="flex"; }
-function handle_playing(){
-  hideAllScreens();
-  // Show the canvas by default (it's always visible)
-  redrawPlayScreen();
-}
-function handle_game_over(){ hideAllScreens(); gameOverScreen.style.display="flex"; }
-
-////////////////////////////////////////////////////////////////////////////////
-// The mainLoop (like your Python "while running" with states)
-////////////////////////////////////////////////////////////////////////////////
-function mainLoop(){
-  switch(gameState){
-    case "menu": 
-      handle_menu();
-      break;
-    case "instructions":
-      handle_instructions();
-      break;
-    case "color_choice":
-      handle_color_choice();
-      break;
-    case "difficulty_choice":
-      handle_difficulty_choice();
-      break;
-    case "playing":
-      // If we are in playing, we keep drawing the board each frame
-      handle_playing();
-      break;
-    case "game_over":
-      handle_game_over();
-      break;
+  function drawLastMove() {
+    if (!lastMove) return;
+    let { from, to } = lastMove;
+    let fromRC = algToRC(from);
+    let toRC = algToRC(to);
+    let { sr: fsr, sc: fsc } = boardToScreen(fromRC.row, fromRC.col);
+    let { sr: tsr, sc: tsc } = boardToScreen(toRC.row, toRC.col);
+    ctx.fillStyle = PINK;
+    ctx.fillRect(fsc * SQUARE_SIZE, fsr * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
+    ctx.fillStyle = ORANGE;
+    ctx.fillRect(tsc * SQUARE_SIZE, tsr * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
   }
-  requestAnimationFrame(mainLoop);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Mouse: Canvas clicks
-////////////////////////////////////////////////////////////////////////////////
-canvas.addEventListener("mousedown",(e)=>{
-  if (gameState!=="playing") return;
-  let rect=canvas.getBoundingClientRect();
-  let mx=e.clientX-rect.left, my=e.clientY-rect.top;
-  if (my>=8*SQUARE_SIZE) return; // bottom bar or outside board
-
-  let scrCol=Math.floor(mx/SQUARE_SIZE);
-  let scrRow=Math.floor(my/SQUARE_SIZE);
-  let {r,c}= screenToBoard(scrRow,scrCol);
-  let file= String.fromCharCode('a'.charCodeAt(0)+c);
-  let rank=(8-r).toString();
-  let square= file+rank; 
-
-  if (!selectedSquare){
-    let piece= chess.get(square);
-    if (piece && piece.color===chess.turn()){
-      selectedSquare=square;
-      let all= chess.moves({verbose:true});
-      legalMoves= all.filter(m=> m.from===square);
+  function drawHighlights() {
+    if (!selectedSquare) return;
+    ctx.fillStyle = "rgba(255, 255, 0, 0.5)";
+    for (let move of legalMoves) {
+      let toRC = algToRC(move.to);
+      let { sr, sc } = boardToScreen(toRC.row, toRC.col);
+      ctx.beginPath();
+      ctx.arc(sc * SQUARE_SIZE + SQUARE_SIZE / 2, sr * SQUARE_SIZE + SQUARE_SIZE / 2, SQUARE_SIZE / 4, 0, Math.PI * 2);
+      ctx.fill();
     }
-  } else {
-    let candidate= legalMoves.find(m=>m.to===square);
-    if (candidate){
-      chess.move(candidate);
-      lastMove=candidate;
-      selectedSquare=null;
-      legalMoves=[];
-      // check game over
-      if (chess.isGameOver()){
-        gameState="game_over";
-        let result="Game Over: ";
-        if (chess.inCheckmate()){
-          if (chess.turn()==='w') result+="Black Wins!";
-          else result+="White Wins!";
+  }
+  function drawPiecesOnTop() {
+    let board = chess.board();
+    for (let row = 0; row < 8; row++){
+      for (let col = 0; col < 8; col++){
+        let piece = board[row][col];
+        if (!piece) continue;
+        let colorStr = (piece.color === 'w') ? "white" : "black";
+        let key = `${colorStr}_${pieceMap[piece.type]}`;
+        if (pieces[key]) {
+          let { sr, sc } = boardToScreen(row, col);
+          ctx.drawImage(pieces[key], sc * SQUARE_SIZE, sr * SQUARE_SIZE, PIECE_SIZE, PIECE_SIZE);
         } else {
-          result+="It's a Draw!";
+          console.warn(`Missing image: ${key}`);
         }
-        gameOverText.textContent= result;
-      } else {
-        // AI turn?
-  if (!chess.isGameOver()) aiTurnIfNeeded();
-}, 100);
+      }
+    }
+  }
+  function drawBottomBar(txt = "") {
+    let barHeight = 60;
+    ctx.fillStyle = WHITE;
+    ctx.fillRect(0, HEIGHT - barHeight, WIDTH, barHeight);
+    ctx.fillStyle = BLACK;
+    ctx.font = "24px sans-serif";
+    ctx.fillText(txt, 10, HEIGHT - 20);
+  }
+  function redrawPlayScreen() {
+    ctx.clearRect(0, 0, WIDTH, HEIGHT);
+    drawBoardOnly();
+    drawLastMove();
+    drawHighlights();
+    drawPiecesOnTop();
+    drawBottomBar("Click piece, then square. Press [M] for menu.");
+  }
 
+  // Overlay Management
+  function hideAllScreens() {
+    menuScreen.style.display = "none";
+    instructionsScreen.style.display = "none";
+    colorScreen.style.display = "none";
+    difficultyScreen.style.display = "none";
+    gameOverScreen.style.display = "none";
+  }
+  function handle_menu() {
+    hideAllScreens();
+    menuScreen.style.display = "flex";
+  }
+  function handle_instructions() {
+    hideAllScreens();
+    instructionsScreen.style.display = "flex";
+  }
+  function handle_color_choice() {
+    hideAllScreens();
+    colorScreen.style.display = "flex";
+  }
+  function handle_difficulty_choice() {
+    hideAllScreens();
+    difficultyScreen.style.display = "flex";
+  }
+  function handle_playing() {
+    hideAllScreens();
+    redrawPlayScreen();
+  }
+  function handle_game_over() {
+    hideAllScreens();
+    gameOverScreen.style.display = "flex";
+  }
+
+  // Main Loop
+  function mainLoop() {
+    switch (gameState) {
+      case "menu":
+        handle_menu();
+        break;
+      case "instructions":
+        handle_instructions();
+        break;
+      case "color_choice":
+        handle_color_choice();
+        break;
+      case "difficulty_choice":
+        handle_difficulty_choice();
+        break;
+      case "playing":
+        handle_playing();
+        break;
+      case "game_over":
+        handle_game_over();
+        break;
+    }
+    if (gameState === "playing") {
+      aiTurnIfNeeded();
+    }
+    requestAnimationFrame(mainLoop);
+  }
+
+  // Mouse Input: Canvas Clicks
+  canvas.addEventListener("mousedown", (e) => {
+    if (gameState !== "playing") return;
+    // Only allow input when it's the player's turn.
+    if (chess.turn() !== playerColor) return;
+    
+    let rect = canvas.getBoundingClientRect();
+    let mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    if (my >= 8 * SQUARE_SIZE) return;
+    
+    let scrCol = Math.floor(mx / SQUARE_SIZE);
+    let scrRow = Math.floor(my / SQUARE_SIZE);
+    let { r, c } = screenToBoard(scrRow, scrCol);
+    let square = String.fromCharCode('a'.charCodeAt(0) + c) + (8 - r).toString();
+
+    if (!selectedSquare) {
+      let piece = chess.get(square);
+      if (piece && piece.color === chess.turn()) {
+        selectedSquare = square;
+        let moves = chess.moves({ verbose: true });
+        legalMoves = moves.filter(m => m.from === square);
       }
     } else {
-      selectedSquare=null;
-      legalMoves=[];
-    }
-  }
-});
-
-function aiTurnIfNeeded(){
-  if ((playerColor==='w' && chess.turn()==='b')||
-      (playerColor==='b' && chess.turn()==='w')){
-    // do AI
-    if (difficulty==="medium"||difficulty==="hard"){
-      // show "Thinking..."
-      ctx.fillStyle="rgba(255,255,255,0.9)";
-      ctx.fillRect(WIDTH/2-100, HEIGHT/2-30, 200,60);
-      ctx.fillStyle="#000";
-      ctx.font="24px sans-serif";
-      ctx.fillText("Thinking...", WIDTH/2-50, HEIGHT/2);
-    }
-    let mv=getAiMove(difficulty, chess);
-    if (mv) {
-  chess.move(mv);
-  lastMove = mv;
-  if (chess.isGameOver()) {
-    gameState = "game_over";
-    let result = "Game Over: ";
-    if (chess.inCheckmate()) {
-      result += (chess.turn() === 'w') ? "Black Wins!" : "White Wins!";
-    } else {
-      result += "It's a Draw!";
-    }
-    gameOverText.textContent = result;
-  }
-} else {
-  console.log("No valid move available. It's a draw.");
-}
-
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Buttons & Keys
-////////////////////////////////////////////////////////////////////////////////
-const newGameBtn = document.getElementById("newGameBtn");
-if (newGameBtn) {
-  newGameBtn.onclick = () => {
-    gameState = "color_choice";
-    console.log("GameState is now:", gameState);
-  };
-} else {
-  console.error("Error: newGameBtn not found!");
-}
-const instructionsBtn = document.getElementById("instructionsBtn");
-if (instructionsBtn) {
-  instructionsBtn.onclick = () => {
-    gameState = "instructions";
-    console.log("GameState is now:", gameState);
-    handle_instructions();
-  };
-} else {
-  console.error("Error: instructionsBtn not found!");
-}
-
-
-
-document.getElementById("whiteSideBtn").onclick=()=>{
-  playerColor='w';
-  chess.reset();
-  selectedSquare=null; legalMoves=[]; lastMove=null;
-  gameState="difficulty_choice";
-};
-document.getElementById("blackSideBtn").onclick=()=>{
-  playerColor='b';
-  chess.reset();
-  selectedSquare=null; legalMoves=[]; lastMove=null;
-  gameState="difficulty_choice";
-};
-
-document.getElementById("easyBtn").onclick=()=>{
-  difficulty="easy";
-  chess.reset();
-  selectedSquare=null; legalMoves=[]; lastMove=null;
-  gameState="playing";
-};
-document.getElementById("mediumBtn").onclick=()=>{
-  difficulty="medium";
-  chess.reset();
-  selectedSquare=null; legalMoves=[]; lastMove=null;
-  gameState="playing";
-};
-document.getElementById("hardBtn").onclick=()=>{
-  difficulty="hard";
-  chess.reset();
-  selectedSquare=null; legalMoves=[]; lastMove=null;
-  gameState="playing";
-};
-
-// Press [M] => go to menu
-document.addEventListener("keydown",(e)=>{
-  if (e.key.toLowerCase()==='m'){
-    if (["playing","instructions","game_over"].includes(gameState)){
-      chess.reset();
-      selectedSquare=null; legalMoves=[]; lastMove=null;
-      gameState="menu";
-    }
-  }
-});
-const pieces = {};  // ✅ Fix: Define an empty object to store images
-function loadImages(callback) {
-  // List all piece names
-  const pieceNames = ["king","queen","rook","bishop","knight","pawn"];
-  const pieceColors = ["white","black"];
-
-  let total = pieceNames.length * pieceColors.length;
-  let loaded = 0;
-
-  pieceColors.forEach(color => {
-    pieceNames.forEach(name => {
-      const key = `${color}_${name}`;
-      const img = new Image();
-      // The path "pieces/white_king.png", etc.
-      img.src = `pieces/${color}_${name}.png`;
-      img.onload = () => {
-        // Store in your `pieces` object:
-        pieces[key] = img;
-        loaded++;
-        // Once all are loaded, call callback()
-        if (loaded === total) {
-          callback();
+      let candidate = legalMoves.find(m => m.to === square);
+      if (candidate) {
+        chess.move(candidate);
+        lastMove = candidate;
+        selectedSquare = null;
+        legalMoves = [];
+        // End game only if checkmate occurs.
+        if (chess.in_checkmate()) {
+          gameState = "game_over";
+          let result = "Game Over: " + (chess.turn() === 'w' ? "Black Wins!" : "White Wins!");
+          gameOverText.textContent = result;
+        } else {
+          aiTurnIfNeeded();
         }
-      };
+      } else {
+        selectedSquare = null;
+        legalMoves = [];
+      }
+    }
+  });
+
+  // AI Turn Handler with Loading Overlay and Spinner
+  function aiTurnIfNeeded() {
+    if (((playerColor === 'w' && chess.turn() === 'b') ||
+         (playerColor === 'b' && chess.turn() === 'w')) && !aiThinking) {
+      aiThinking = true;
+      // Show the "Thinking" overlay immediately.
+      loadingOverlay.style.display = "flex";
+      // Delay the AI move by 2000ms to simulate thinking.
+      setTimeout(() => {
+        let move = getAiMove(difficulty, chess);
+        if (move) {
+          chess.move(move);
+          lastMove = move;
+          if (chess.in_checkmate()) {
+            gameState = "game_over";
+            let result = "Game Over: " + (chess.turn() === 'w' ? "Black Wins!" : "White Wins!");
+            gameOverText.textContent = result;
+          }
+        } else {
+          // If no valid move is available, declare player win.
+          gameState = "game_over";
+          gameOverText.textContent = "Game Over: You win! (Opponent has no valid moves)";
+        }
+        aiThinking = false;
+        loadingOverlay.style.display = "none";
+      }, 2000);
+    }
+  }
+
+  // Button & Keyboard Handlers
+  document.getElementById("newGameBtn").onclick = () => {
+    gameState = "color_choice";
+  };
+  document.getElementById("instructionsBtn").onclick = () => {
+    gameState = "instructions";
+  };
+  document.getElementById("whiteSideBtn").onclick = () => {
+    playerColor = 'w';
+    chess.reset();
+    selectedSquare = null; legalMoves = []; lastMove = null;
+    gameState = "difficulty_choice";
+  };
+  document.getElementById("blackSideBtn").onclick = () => {
+    playerColor = 'b';
+    chess.reset();
+    selectedSquare = null; legalMoves = []; lastMove = null;
+    gameState = "difficulty_choice";
+  };
+  document.getElementById("easyBtn").onclick = () => {
+    difficulty = "easy";
+    chess.reset();
+    selectedSquare = null; legalMoves = []; lastMove = null;
+    gameState = "playing";
+  };
+  document.getElementById("mediumBtn").onclick = () => {
+    difficulty = "medium";
+    chess.reset();
+    selectedSquare = null; legalMoves = []; lastMove = null;
+    gameState = "playing";
+  };
+  document.getElementById("hardBtn").onclick = () => {
+    difficulty = "hard";
+    chess.reset();
+    selectedSquare = null; legalMoves = []; lastMove = null;
+    gameState = "playing";
+  };
+  document.getElementById("gameOverNewGameBtn").onclick = () => {
+    gameState = "color_choice";
+  };
+  // Unified keyboard shortcuts.
+  document.addEventListener("keydown", (e) => {
+    let key = e.key.toLowerCase();
+    if (gameState === "color_choice") {
+      if (key === "w") {
+        document.getElementById("whiteSideBtn").click();
+      } else if (key === "b") {
+        document.getElementById("blackSideBtn").click();
+      }
+    } else if (gameState === "difficulty_choice") {
+      if (key === "e") {
+        document.getElementById("easyBtn").click();
+      } else if (key === "m") {
+        document.getElementById("mediumBtn").click();
+      } else if (key === "h") {
+        document.getElementById("hardBtn").click();
+      }
+    } else if (["playing", "instructions", "game_over"].includes(gameState)) {
+      if (key === "m") {
+        chess.reset();
+        selectedSquare = null; legalMoves = []; lastMove = null;
+        gameState = "menu";
+      }
+    }
+  });
+
+  // Image Loading with White Background Removal using Relative Paths.
+  function loadImages(callback) {
+    const pieceNames = ["king", "queen", "rook", "bishop", "knight", "pawn"];
+    const pieceColors = ["white", "black"];
+    let total = pieceNames.length * pieceColors.length;
+    let loaded = 0;
+    pieceColors.forEach(color => {
+      pieceNames.forEach(name => {
+        const key = `${color}_${name}`;
+        const img = new Image();
+        img.crossOrigin = "Anonymous";
+        img.src = `pieces/${color}_${name}.png`;
+        img.onload = () => {
+          removeWhiteBackground(img, (newImage) => {
+            pieces[key] = newImage;
+            loaded++;
+            if (loaded === total) {
+              callback();
+            }
+          });
+        };
+      });
     });
+  }
+
+  // Start Everything
+  function startAll() {
+    chess.reset();
+    hideAllScreens();
+    menuScreen.style.display = "flex";
+    loadImages(() => {
+      requestAnimationFrame(mainLoop);
+    });
+  }
+  window.addEventListener("load", () => {
+    startAll();
   });
-}
-
-
-
-
-////////////////////////////////////////////////////////////////////////////////
-// Start
-////////////////////////////////////////////////////////////////////////////////
-function startAll(){
-  console.log("starting everything...");
-  chess.reset();
-  console.log("Testing chess.board():", typeof chess.board);
-  hideAllScreens();
-  menuScreen.style.display="flex";
-
-  loadImages(()=>{
-    console.log("Images loaded.");
-    requestAnimationFrame(mainLoop);
-  });
-}
-
-window.addEventListener("load",()=> startAll());
 </script>
 </body>
 </html>
