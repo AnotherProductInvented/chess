@@ -34,9 +34,8 @@
       display: none; /* shown/hidden dynamically */
       background: rgba(255,255,255,0.95);
       align-items: center;
-      justify-content: flex-start;
+      justify-content: center;
       flex-direction: column;
-      padding-top: 80px;
       text-align: center;
       z-index: 5;
     }
@@ -72,21 +71,34 @@
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
+    /* Logo placed in bottom-right corner */
+    #logo {
+      position: fixed;
+      bottom: 10px;
+      right: 10px;
+      max-width: 100px;
+      z-index: 2000;
+    }
   </style>
 </head>
 <body>
 
+<!-- Main Title -->
 <h1>Another Product Invented Chess</h1>
+
 <div id="gameContainer">
   <!-- MENU SCREEN -->
   <div id="menuScreen" class="overlayScreen">
+    <!-- Title split into two lines -->
+    <h2 style="margin:0;">Another Product Invented</h2>
+    <h2 style="margin:0;">Chess</h2>
     <button id="newGameBtn">New Game</button>
     <button id="instructionsBtn">Instructions</button>
   </div>
 
   <canvas id="chessCanvas" width="720" height="800"></canvas>
 
-  <!-- INSTRUCTIONS -->
+  <!-- INSTRUCTIONS SCREEN -->
   <div id="instructionsScreen" class="overlayScreen">
     <p><strong>Objective</strong></p>
     <p>The goal is to checkmate your opponent's king.</p>
@@ -103,7 +115,7 @@
     <p>Press [M] to return to the Main Menu.</p>
   </div>
 
-  <!-- COLOR CHOICE -->
+  <!-- COLOR CHOICE SCREEN -->
   <div id="colorScreen" class="overlayScreen">
     <p>Choose Your Side:</p>
     <button id="whiteSideBtn">White [W]</button>
@@ -111,7 +123,7 @@
     <p>You can also press W or B on your keyboard.</p>
   </div>
 
-  <!-- DIFFICULTY -->
+  <!-- DIFFICULTY SCREEN -->
   <div id="difficultyScreen" class="overlayScreen">
     <p>Select Difficulty:</p>
     <button id="easyBtn">Easy [E]</button>
@@ -120,7 +132,7 @@
     <p>You can also press E, M, or H on your keyboard.</p>
   </div>
 
-  <!-- GAME OVER -->
+  <!-- GAME OVER SCREEN -->
   <div id="gameOverScreen" class="overlayScreen">
     <h2 id="gameOverText"></h2>
     <button id="gameOverNewGameBtn">New Game</button>
@@ -128,7 +140,10 @@
   </div>
 </div>
 
-<!-- Loading/Thinking overlay with spinner -->
+<!-- Logo placed in bottom-right corner -->
+<img id="logo" src="logo.png" alt="Logo">
+
+<!-- Loading/Thinking Overlay with Spinner -->
 <div id="loadingOverlay">
   <div class="spinner"></div>
   <p>Thinking...</p>
@@ -147,8 +162,8 @@
     const imgData = tempCtx.getImageData(0, 0, image.width, image.height);
     const data = imgData.data;
     for (let i = 0; i < data.length; i += 4) {
-      if (data[i] > 250 && data[i + 1] > 250 && data[i + 2] > 250) {
-        data[i + 3] = 0;
+      if (data[i] > 250 && data[i+1] > 250 && data[i+2] > 250) {
+        data[i+3] = 0;
       }
     }
     tempCtx.putImageData(imgData, 0, 0);
